@@ -38,8 +38,6 @@ import warnings
 # Suppress torchaudio warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-torchaudio.set_audio_backend("soundfile") # Force stable backend
-
 def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2048, hop_length=512, return_single_random=False):
     """
     Reads an audio file, splits it into fixed duration segments, 
