@@ -29,7 +29,16 @@
 # Prepare clean input features for model training
 
 import librosa
+import subprocess
 import numpy as np
+
+def get_file_duration(file_path):
+    """Uses raw ffprobe for instant header reads without opening the file."""
+    try:
+        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path]
+        return float(subprocess.check_output(cmd, stderr=subprocess.STDOUT).strip())
+    except Exception:
+        return 5.0 # Safe fallback
 
 def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2048, hop_length=512, return_single_random=False):
     """
@@ -39,12 +48,7 @@ def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2
     # If training, only load a single random 5-second slice instead of decoding 5 minutes of audio!
     if return_single_random:
         try:
-            # `librosa.get_duration` can be very slow for parsing .ogg headers sequentially.
-            # Using PyTorch's native `torchaudio` just to peek the header is lightning fast.
-            import torchaudio
-            info = torchaudio.info(file_path)
-            total_duration = info.num_frames / info.sample_rate
-            
+            total_duration = get_file_duration(file_path)
             max_offset = max(0, total_duration - segment_duration)
             offset = np.random.uniform(0, max_offset)
             y, sr = librosa.load(file_path, sr=sr, offset=offset, duration=segment_duration)

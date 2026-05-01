@@ -113,13 +113,13 @@ def main():
         species_list=species_list
     )
     
-    # Use num_workers=0 to prevent multiprocessing deadlocks with librosa/soundfile in Colab
+    # In Colab + torch + librosa, we batch load to prevent GIL lock
     train_loader = DataLoader(
         dataset, 
         batch_size=config["batch_size"], 
         shuffle=True, 
         num_workers=0, 
-        pin_memory=True
+        pin_memory=False
     )
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
