@@ -30,6 +30,8 @@
 
 import librosa
 import numpy as np
+import torch
+import torchaudio
 
 def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2048, hop_length=512, return_single_random=False):
     """
@@ -37,22 +39,55 @@ def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2
     and converts them to normalized mel spectrograms.
     """
     if return_single_random:
-        # ⚠️ CRITICAL OGG FIX: .ogg files do NOT store duration in their header! 
-        # Attempting to find the file duration requires python/ffmpeg to scan to the end 
-        # of the file first, which causes the massive Dataloader freezes you're seeing.
-        # FIX: Just read the first 5 seconds instantly directly from disk.
-        y, sr = librosa.load(file_path, sr=sr, offset=0.0, duration=segment_duration)
-            
-        chunk_samples = int(sr * segment_duration)
-        if len(y) < chunk_samples:
-            y = np.pad(y, (0, chunk_samples - len(y)), mode='constant')
-            
-        mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
-        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-        eps = 1e-8
-        normalized_mel_spec = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + eps)
+        # SUPER-FAST PATH: Bypass librosa/scipy entirely to prevent hanging CPU threads!
+        # torchaudio compiles natively in C++ and executes FFT hundreds of times faster.
         
-        return np.array([normalized_mel_spec])
+        # 1. Load just 5 seconds instantly using torchaudio
+        num_frames = int(sr * segment_duration)
+        try:
+            # Try to load exactly what we need
+            waveform, sample_rate = torchaudio.load(file_path, num_frames=num_frames)
+        except Exception:
+            # Fallback
+            y, sample_rate = librosa.load(file_path, sr=sr, offset=0.0, duration=segment_duration)
+            waveform = torch.from_numpy(y).unsqueeze(0)
+
+        # Resample if necessary
+        if sample_rate != sr:
+            resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=sr)
+            waveform = resampler(waveform)
+
+        # Convert to Mono
+        if waveform.shape[0] > 1:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
+        # Pad
+        expected_samples = int(sr * segment_duration)
+        if waveform.shape[1] < expected_samples:
+            padding = expected_samples - waveform.shape[1]
+            waveform = torch.nn.functional.pad(waveform, (0, padding))
+
+        # Fast GPU/C++ natively optimized Mel Spectrogram
+        mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=sr,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels
+        )
+        
+        mel_spec = mel_transform(waveform)
+        
+        # Power to DB and Normalize
+        amp_to_db = torchaudio.transforms.AmplitudeToDB()
+        mel_spec_db = amp_to_db(mel_spec)
+        
+        mel_min = mel_spec_db.min()
+        mel_max = mel_spec_db.max()
+        eps = 1e-8
+        
+        normalized_mel_spec = (mel_spec_db - mel_min) / (mel_max - mel_min + eps)
+        
+        return normalized_mel_spec.numpy()  # Returns shape (1, 128, X)
 
     # Step 1: Load audio file
     # sr=32000 is a common sample rate for BirdCLEF

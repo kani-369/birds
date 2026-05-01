@@ -66,14 +66,11 @@ class BirdCLEFDataset(Dataset):
         # We'll use a generic approach based on standard naming 'filename'
         audio_path = os.path.join(self.audio_dir, row.get('filename', ''))
         
-        # 1. Convert into a single 5-sec spectrogram segment (Extremely fast)
+        # 1. Convert into a single 5-sec spectrogram segment (Extremely fast via TorchAudio)
         spectrograms = process_audio(audio_path, return_single_random=True)
         
-        # 🔥 KEY CHANGE: Randomly choose ONE 5-second segment
-        segment = random.choice(spectrograms)
-        
-        # Add channel dimension: expected shape (1, 128, time_steps)
-        segment = segment[np.newaxis, :, :]
+        # 🔥 Torchaudio array is already (1, 128, time_steps)
+        segment = spectrograms[0] if len(spectrograms.shape) > 3 else spectrograms
         
         # 2. Assign labels (multi-label multi-hot encoding)
         primary = row.get('primary_label', '')
