@@ -32,6 +32,13 @@ import librosa
 import numpy as np
 import torch
 import torchaudio
+import soundfile as sf
+import warnings
+
+# Suppress torchaudio warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+torchaudio.set_audio_backend("soundfile") # Force stable backend
 
 def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2048, hop_length=512, return_single_random=False):
     """
@@ -39,14 +46,18 @@ def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2
     and converts them to normalized mel spectrograms.
     """
     if return_single_random:
-        # SUPER-FAST PATH: Bypass librosa/scipy entirely to prevent hanging CPU threads!
-        # torchaudio compiles natively in C++ and executes FFT hundreds of times faster.
-        
-        # 1. Load just 5 seconds instantly using torchaudio
-        num_frames = int(sr * segment_duration)
+        # SUPER-FAST PATH: Use direct soundfile to read exactly 5 seconds.
+        # This completely bypasses torchaudio codec issues and librosa overhead.
         try:
-            # Try to load exactly what we need
-            waveform, sample_rate = torchaudio.load(file_path, num_frames=num_frames)
+            frames_to_read = int(sr * segment_duration)
+            y, sample_rate = sf.read(file_path, frames=frames_to_read, dtype='float32', always_2d=False)
+            
+            if y.ndim > 1:
+                y = y.mean(axis=1) # to mono
+
+            # Convert to tensor
+            waveform = torch.from_numpy(y).unsqueeze(0)
+            
         except Exception:
             # Fallback
             y, sample_rate = librosa.load(file_path, sr=sr, offset=0.0, duration=segment_duration)

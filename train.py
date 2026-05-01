@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import pandas as pd
+from tqdm import tqdm
 
 # Import our custom files
 from dataset import BirdCLEFDataset
@@ -143,7 +144,7 @@ def main():
             model.train()
             total_loss = 0
             
-            for batch in train_loader:
+            for batch in tqdm(train_loader, desc=f"Epoch {epoch}/{config['num_epochs']-1}"):
                 inputs, labels = batch
                 inputs, labels = inputs.to(device), labels.to(device)
                 
