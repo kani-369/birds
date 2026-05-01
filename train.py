@@ -113,12 +113,12 @@ def main():
         species_list=species_list
     )
     
-    # Use multiple workers for fast data loading in Colab
+    # Use num_workers=0 to prevent multiprocessing deadlocks with librosa/soundfile in Colab
     train_loader = DataLoader(
         dataset, 
         batch_size=config["batch_size"], 
         shuffle=True, 
-        num_workers=2, 
+        num_workers=0, 
         pin_memory=True
     )
     
