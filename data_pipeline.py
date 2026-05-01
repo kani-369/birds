@@ -29,31 +29,19 @@
 # Prepare clean input features for model training
 
 import librosa
-import subprocess
 import numpy as np
-
-def get_file_duration(file_path):
-    """Uses raw ffprobe for instant header reads without opening the file."""
-    try:
-        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path]
-        return float(subprocess.check_output(cmd, stderr=subprocess.STDOUT).strip())
-    except Exception:
-        return 5.0 # Safe fallback
 
 def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2048, hop_length=512, return_single_random=False):
     """
     Reads an audio file, splits it into fixed duration segments, 
     and converts them to normalized mel spectrograms.
     """
-    # If training, only load a single random 5-second slice instead of decoding 5 minutes of audio!
     if return_single_random:
-        try:
-            total_duration = get_file_duration(file_path)
-            max_offset = max(0, total_duration - segment_duration)
-            offset = np.random.uniform(0, max_offset)
-            y, sr = librosa.load(file_path, sr=sr, offset=offset, duration=segment_duration)
-        except Exception:
-            y, sr = librosa.load(file_path, sr=sr, duration=segment_duration)
+        # ⚠️ CRITICAL OGG FIX: .ogg files do NOT store duration in their header! 
+        # Attempting to find the file duration requires python/ffmpeg to scan to the end 
+        # of the file first, which causes the massive Dataloader freezes you're seeing.
+        # FIX: Just read the first 5 seconds instantly directly from disk.
+        y, sr = librosa.load(file_path, sr=sr, offset=0.0, duration=segment_duration)
             
         chunk_samples = int(sr * segment_duration)
         if len(y) < chunk_samples:
