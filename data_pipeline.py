@@ -39,7 +39,12 @@ def process_audio(file_path, sr=32000, segment_duration=5.0, n_mels=128, n_fft=2
     # If training, only load a single random 5-second slice instead of decoding 5 minutes of audio!
     if return_single_random:
         try:
-            total_duration = librosa.get_duration(path=file_path)
+            # `librosa.get_duration` can be very slow for parsing .ogg headers sequentially.
+            # Using PyTorch's native `torchaudio` just to peek the header is lightning fast.
+            import torchaudio
+            info = torchaudio.info(file_path)
+            total_duration = info.num_frames / info.sample_rate
+            
             max_offset = max(0, total_duration - segment_duration)
             offset = np.random.uniform(0, max_offset)
             y, sr = librosa.load(file_path, sr=sr, offset=offset, duration=segment_duration)
