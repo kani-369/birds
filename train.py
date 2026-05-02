@@ -185,11 +185,13 @@ def main():
         for epoch in range(start_epoch, config["num_epochs"]):
             print(f"Epoch {epoch} → {len(train_loader)} batches")
             model.train()
-            total_loss = 0
+            batches_processed = 0
+            total_loss = 0.0
             
             t0 = time.time()
             try:
                 for batch_idx, batch in enumerate(tqdm(train_loader, desc=f"Epoch {epoch}/{config['num_epochs']-1}")):
+                    batches_processed += 1
                     if (time.time() - SESSION_START) > MAX_RUNTIME:
                         print("\n⏳ Time limit approaching — exiting safely...")
                         break
@@ -226,7 +228,12 @@ def main():
                 print(f"DataLoader failure: {e}")
                 raise e
                 
-            avg_loss = total_loss / len(train_loader)
+            if batches_processed > 0:
+                avg_loss = total_loss / batches_processed
+            else:
+                print("⚠️ No batches processed — skipping loss computation")
+                continue
+                
             print(f"Epoch {epoch} - Loss: {avg_loss:.4f}")
 
             # 🔹 Save BEST model
