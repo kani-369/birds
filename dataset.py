@@ -78,7 +78,10 @@ class BirdCLEFDataset(Dataset):
         
         label_vector = self._get_multi_hot_labels(primary, secondary)
         
-        # Convert to PyTorch tensors
+        # Convert to PyTorch tensors (and avoid CPU bottleneck with astype)
+        segment = np.array(segment).astype("float32")
+        label_vector = np.array(label_vector).astype("float32")
+        
         segment_tensor = torch.tensor(segment, dtype=torch.float32)
         label_tensor = torch.tensor(label_vector, dtype=torch.float32)
         
